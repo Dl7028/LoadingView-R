@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--自定义View的属性-->
+    <declare-styleable name="LoadingViewR">
+        <attr name="lineNumber" format="integer"/>
+        <attr name="half_BlockWidth" format="dimension"/>
+        <attr name="blockInterval" format="dimension"/>
+        <attr name="move_blockAngle" format="float"/>
+        <attr name="fix_blockAngle" format="float"/>
+        <attr name="blockColor" format="color"/>
+        <attr name="initPosition" format="integer"/>
+        <attr name="isClock_Wise" format="boolean"/>
+        <attr name="moveSpeed" format="integer"/>
+        <attr name="move_Interpolator" format="reference"/>
+    </declare-styleable>
+</resources>
