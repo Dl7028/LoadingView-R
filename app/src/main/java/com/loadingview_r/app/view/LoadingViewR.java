@@ -1,9 +1,11 @@
 package com.loadingview_r.app.view;
 
 import android.animation.AnimatorSet;
-import android.annotation.SuppressLint;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
@@ -27,7 +29,7 @@ public class LoadingViewR extends View {
     private float mHalfBlockWidth;  //半个方块的宽度
     private float mBlockInterval; //方块间隔
     private Paint mPaint; //
-    private boolean isClockWise; //动画是否是顺时针旋转
+    private boolean isClockWise; //动画是否是逆时针旋转
     private int mInitPosition; //移动方块的初始位置（空白位置）
     private int mCurrEmptyPosition; //当前空白方块位置
     private int mLineNumber; //方块行数量，最少3行
@@ -61,6 +63,26 @@ public class LoadingViewR extends View {
 
     public LoadingViewR(Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
+    }
+    /**
+     * 内部类 ，固定方块类
+     */
+    private static class FixedBlock{
+        RectF rectF;  // 存储方块的坐标位置参数
+        int index;  //方块对应序列号
+        boolean isShow; //标志位,判断是否显示
+        FixedBlock next ; //指向下一个方块
+    }
+
+    /**
+     * 内部类，移动方块类
+     */
+    private  static class MoveBlock{
+        RectF rectF; // 存储方块的坐标位置参数
+        int index; //对应序列号
+        boolean isShow; //判断是否显示
+        float mX; //旋转中心坐标
+        float mY;
     }
 
 
@@ -146,47 +168,204 @@ public class LoadingViewR extends View {
         mMoveBlock.rectF = new RectF(); //构造一个无参矩形
         mMoveBlock.isShow = false;
 
-        relateOuterBlock(mFixedBlock,isClockWise)
+        relateOuterBlock(mFixedBlock,isClockWise);
 
     }
 
     /**
      * 关联外部方块
      * @param fixedBlocks 方块数组
-     * @param isClockWise 是否顺时针旋转
+     * @param isClockWise 是否逆时针旋转
      */
     private void relateOuterBlock(FixedBlock[] fixedBlocks,boolean isClockWise){
         int lineCount = (int) Math.sqrt(fixedBlocks.length);
 
         //关联第一行
         for(int i = 0;i<lineCount;i++){
-            //左上角第一个方块
-            if (i % lineCount == 0){
-                fixedBlocks[i].next = isClockWise?fixedBlocks[i+lineCount]:fixedBlocks[i+1];
+            if (i % lineCount == 0){      //左上角第一个方块
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i+lineCount]:fixedBlocks[i+1];
+            }else if((i+1)%lineCount==0){ //右上角第一个方块
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i-1]:fixedBlocks[i+lineCount];
+            }else{       //中间方块
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i-1]:fixedBlocks[i+1];
             }
+        }
+        //关联最后一行
+        for(int i = (lineCount - 1)*lineCount;i<lineCount*lineCount;i++){
+            if(i % lineCount == 0){  //位于最左边
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i+1] : fixedBlocks[i-lineCount];
+            }else if((i + 1) % lineCount == 0){ //位于最右边
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i-lineCount] : fixedBlocks[i - 1];
+            }else { //位于中间
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i + 1 ] : fixedBlocks[i - 1];
+            }
+        }
+        //关联第一列
+        for (int i = lineCount; i<=lineCount*lineCount-1; i=lineCount+1){
+            if(i == (lineCount-1)*lineCount){ //第一列最后一个
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i+1] : fixedBlocks[i-lineCount];
+                continue;
+            }
+            fixedBlocks[i].next = isClockWise ? fixedBlocks[i+lineCount] : fixedBlocks[i-lineCount];
+        }
+        //关联最后一列
+        for (int i = 2 *lineCount - 1;i <= lineCount*lineCount-1;i = lineCount+1){
+            if(i == lineCount*lineCount-1){ //最后一列的最后一个
+                fixedBlocks[i].next = isClockWise ? fixedBlocks[i - lineCount] : fixedBlocks[i - 1];
+                continue;
+            }
+            fixedBlocks[i].next = isClockWise ? fixedBlocks[i-lineCount] : fixedBlocks[i + lineCount];
         }
     }
 
 
     /**
-     * 内部类 ，固定方块类
+     * 设置方块的初始位置
+     *  调用时刻：onCreate之后onDraw之前调用；view的大小发生改变就会调用该方法
+     *  使用场景：用于屏幕的大小改变时，需要根据屏幕宽高来决定的其他变量可以在这里进行初始化操作
+     * @param w 当前View宽度
+     * @param h 当前View高度
+     * @param oldw 旧View的宽
+     * @param oldh 旧View的高
      */
-    private static class FixedBlock{
-        RectF rectF;  // 存储方块的坐标位置参数
-        int index;  //方块对应序列号
-        boolean isShow; //标志位,判断是否显示
-        FixedBlock next ; //指向下一个方块
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        int measuredWidth = getMeasuredWidth();
+        int measuredHeight = getMeasuredHeight();
+
+        int cx = measuredWidth/2;
+        int cy = measuredHeight/2;
+        //设置固定方块的位置
+        fixedBlockPosition(mFixedBlock,cx,cy,mBlockInterval,mHalfBlockWidth);
+        //设置移动方块的位置
+        MoveBlockPosition(mFixedBlock,mMoveBlock,mInitPosition,isClockWise);
     }
 
     /**
-     * 内部类，移动方块类
+     * 设置固定方块的位置
+     * @param fixedBlocks 方块属猪
+     * @param cx 横坐标
+     * @param cy 纵坐标
+     * @param dividerWidth 方块间隔
+     * @param halfSquareWidth 方块一半长度
      */
-    private  static class MoveBlock{
-        RectF rectF; // 存储方块的坐标位置参数
-        int index; //对应序列号
-        boolean isShow; //判断是否显示
-        float mX; //旋转中心坐标
-        float mY;
+    private void fixedBlockPosition(FixedBlock[] fixedBlocks, int cx, int cy, float dividerWidth, float halfSquareWidth){
+        //确定第一个方块的位置
+        float squareWidth = halfSquareWidth * 2;
+        int lineCount = (int) Math.sqrt(fixedBlocks.length);
+        float firstRectLeft = 0;
+        float firstRectTop = 0;
+        //当行数为偶数时
+        if(lineCount%2 == 0){
+            int squareCountInAline = lineCount / 2;
+            int divieCountInAline = squareCountInAline - 1;
+            float firstRectLeftTopFromCenter = squareCountInAline * squareWidth
+                                                + divieCountInAline * dividerWidth
+                                                + dividerWidth / 2;
+            firstRectLeft = cx - firstRectLeftTopFromCenter;
+            firstRectTop = cy - firstRectLeftTopFromCenter;
+        }else {
+            int squareCountInAline = lineCount / 2;
+            int diviCountInAline = squareCountInAline;
+            float firstRectLeftTopFromCenter = squareCountInAline * squareWidth
+                    + diviCountInAline * dividerWidth
+                    + halfSquareWidth;
+
+            firstRectLeft = cx - firstRectLeftTopFromCenter;
+            firstRectTop = cy - firstRectLeftTopFromCenter;
+        }
+
+        // 2. 确定剩下的方块位置
+        // 思想：把第一行方块位置往下移动即可
+        // 通过for循环确定：第一个for循环 = 行，第二个 = 列
+        for (int i = 0; i < lineCount; i++) {//行
+            for (int j = 0; j < lineCount; j++) {//列
+                if (i == 0) {
+                    if (j == 0) {
+                        fixedBlocks[0].rectF.set(firstRectLeft, firstRectTop,
+                                firstRectLeft + squareWidth, firstRectTop + squareWidth);
+                    } else {
+                        int currIndex = i * lineCount + j;
+                        fixedBlocks[currIndex].rectF.set(fixedBlocks[currIndex - 1].rectF);
+                        fixedBlocks[currIndex].rectF.offset(dividerWidth + squareWidth, 0);
+                    }
+                } else {
+                    int currIndex = i * lineCount + j;
+                    fixedBlocks[currIndex].rectF.set(fixedBlocks[currIndex - lineCount].rectF);
+                    fixedBlocks[currIndex].rectF.offset(0, dividerWidth + squareWidth);
+                }
+            }
+        }
+    }
+
+    /**
+     * 设置移动方块的位置
+     * @param fixedBlocks 方块数组
+     * @param moveBlock 移动方块对象
+     * @param initPosition 初始位置
+     * @param isClockwise 是否是逆时针
+     */
+    private void MoveBlockPosition(FixedBlock[] fixedBlocks,
+                                   MoveBlock moveBlock, int initPosition, boolean isClockwise) {
+
+        // 移动方块位置 = 设置初始的空出位置 的下一个位置（next）
+        // 下一个位置 通过 连接的外部方块位置确定
+        FixedBlock fixedBlock = fixedBlocks[initPosition];
+        moveBlock.rectF.set(fixedBlock.next.rectF);
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        //绘制内部方块
+        for (int i = 0;i<mFixedBlock.length;i++){
+            if(mFixedBlock[i].isShow){
+                //传入方块位置参数、圆角和画笔属性
+                canvas.drawRoundRect(mFixedBlock[i].rectF,mFixBlockAngle,mFixBlockAngle,mPaint);
+            }
+        }
+        //绘制移动方块
+        if (mMoveBlock.isShow){
+            canvas.rotate(isClockWise ? mRotateDegree : -mRotateDegree,mMoveBlock.mX,mMoveBlock.mY);
+            canvas.drawRoundRect(mMoveBlock.rectF, mMoveBlockAngle, mMoveBlockAngle, mPaint);
+        }
+    }
+
+    /**
+     * 启动动画
+     */
+    private void startMoving(){
+        if(isMoving || getVisibility()!=View.VISIBLE){
+            return;
+        }
+        //设置是否停止动画的标志位
+        isMoving = true;
+        mAllowRoll = true;
+        //获取移动方块当前位置，即固定方块的空位置
+        FixedBlock currEmptyFixedBlock = mFixedBlock[mCurrEmptyPosition];
+        // 3. 获取移动方块的到达位置，即固定方块当前空位置的下1个位置
+        FixedBlock moveBlock = currEmptyFixedBlock.next;
+
+        //设置平移动画
+        mAnimatorSet = new AnimatorSet();
+
+    }
+
+    /**
+     * 设置平移动画
+     * @param currEmptyFixedBlock 固定方块的空位置
+     * @param moveBlock 要移动的位置
+     * @return
+     */
+    private ValueAnimator createTranslateValueAnimator(FixedBlock currEmptyFixedBlock,FixedBlock moveBlock){
+        float startAnimValue = 0;
+        float endAnimValue = 0;
+        PropertyValuesHolder left = null;
+        PropertyValuesHolder top = null;
+        //设置移动速度
+        ValueAnimator valueAnimator = new ValueAnimator().setDuration(mMoveSpeed);
+
+        return valueAnimator;
     }
 
 
