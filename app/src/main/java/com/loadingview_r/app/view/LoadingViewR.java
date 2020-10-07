@@ -1,5 +1,7 @@
 package com.loadingview_r.app.view;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.PropertyValuesHolder;
 import android.animation.ValueAnimator;
@@ -9,6 +11,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
@@ -48,11 +51,11 @@ public class LoadingViewR extends View {
     private AnimatorSet mAnimatorSet;
 
     public LoadingViewR(Context context) {
-        super(context);
+        this(context, null);
     }
 
     public LoadingViewR(Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
+        this(context, attrs, 0);
     }
 
     public LoadingViewR(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
@@ -61,9 +64,7 @@ public class LoadingViewR extends View {
         init(); //初始化自定义View
     }
 
-    public LoadingViewR(Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
-    }
+
     /**
      * 内部类 ，固定方块类
      */
@@ -103,13 +104,13 @@ public class LoadingViewR extends View {
         mMoveBlockAngle = typedArray.getFloat(R.styleable.LoadingViewR_move_blockAngle,10);
         mFixBlockAngle = typedArray.getFloat(R.styleable.LoadingViewR_fix_blockAngle,30);
 
-        int defaultColor = context.getResources().getColor(R.color.colorAccent,null); //默认颜色
+        int defaultColor = context.getResources().getColor(R.color.colorAccent); //默认颜色
         mBlockColor = typedArray.getColor(R.styleable.LoadingViewR_blockColor,defaultColor);
 
         mInitPosition = typedArray.getInteger(R.styleable.LoadingViewR_initPosition,0); //设置移动方块的位置为0
-//        if(isInsideBlock(mInitPosition,mLineNumber)){   //判断方块是否属于外部方块
-//            mInitPosition = 0 ;
-//        }
+        if(isInsideBlock(mInitPosition,mLineNumber)){   //判断方块是否属于外部方块
+            mInitPosition = 0 ;
+        }
 
         isClockWise = typedArray.getBoolean(R.styleable.LoadingViewR_isClock_Wise,true);
         mMoveSpeed = typedArray.getInteger(R.styleable.LoadingViewR_moveSpeed,250);
@@ -154,12 +155,12 @@ public class LoadingViewR extends View {
      */
     private void initBlocks(int initPosition){
         mFixedBlock = new FixedBlock[mLineNumber*mLineNumber]; //方块总数量
-
+        Log.d("initBlocks","new对象");
         //创建固定方块并保存到数组
         for(int i =0;i<mFixedBlock.length;i++){
             mFixedBlock[i] = new FixedBlock();
             mFixedBlock[i].index = i; //赋值下标
-            mFixedBlock[i].isShow = mInitPosition != i; //如果是移动方块则不显示
+            mFixedBlock[i].isShow = initPosition != i; //如果是移动方块则不显示
             mFixedBlock[i].rectF = new RectF(); //位置参数
         }
 
@@ -318,10 +319,10 @@ public class LoadingViewR extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         //绘制内部方块
-        for (int i = 0;i<mFixedBlock.length;i++){
-            if(mFixedBlock[i].isShow){
+        for (FixedBlock fixedBlock : mFixedBlock) {
+            if (fixedBlock.isShow) {
                 //传入方块位置参数、圆角和画笔属性
-                canvas.drawRoundRect(mFixedBlock[i].rectF,mFixBlockAngle,mFixBlockAngle,mPaint);
+                canvas.drawRoundRect(fixedBlock.rectF, mFixBlockAngle, mFixBlockAngle, mPaint);
             }
         }
         //绘制移动方块
@@ -334,7 +335,7 @@ public class LoadingViewR extends View {
     /**
      * 启动动画
      */
-    private void startMoving(){
+    public void startMoving(){
         if(isMoving || getVisibility()!=View.VISIBLE){
             return;
         }
@@ -348,14 +349,55 @@ public class LoadingViewR extends View {
 
         //设置平移动画
         mAnimatorSet = new AnimatorSet();
+        // 平移路径 = 初始位置 - 到达位置
+        ValueAnimator translateConrtroller = createTranslateValueAnimator(currEmptyFixedBlock,
+                moveBlock);
+        // 4.2 设置旋转动画：createMoveValueAnimator
+        ValueAnimator moveConrtroller = createMoveValueAnimator();
+        // 4.3 将两个动画组合起来
+        // 设置移动的插值器
+        mAnimatorSet.setInterpolator(mMoveInterpolator);
+        mAnimatorSet.playTogether(translateConrtroller, moveConrtroller);
+        mAnimatorSet.addListener(new AnimatorListenerAdapter() {
+            // 动画开始时进行一些设置
+            @Override
+            public void onAnimationStart(Animator animation) {
 
+                // 每次动画开始前都需要更新移动方块的位置
+                updateMoveBlock();
+
+                // 让移动方块的初始位置的下个位置也隐藏 = 两个隐藏的方块
+                mFixedBlock[mCurrEmptyPosition].next.isShow = false;
+
+                // 通过标志位将移动的方块显示出来
+                mMoveBlock.isShow = true;
+            }
+
+            // 结束时进行一些设置
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                isMoving = false;
+                mFixedBlock[mCurrEmptyPosition].isShow = true;
+                mCurrEmptyPosition = mFixedBlock[mCurrEmptyPosition].next.index;
+
+                // 将移动的方块隐藏
+                mMoveBlock.isShow = false;
+
+                // 通过标志位判断动画是否要循环播放
+                if (mAllowRoll) {
+                    startMoving();
+                }
+            }
+        });
+
+        // 启动动画
+        mAnimatorSet.start();
     }
-
     /**
      * 设置平移动画
      * @param currEmptyFixedBlock 固定方块的空位置
      * @param moveBlock 要移动的位置
-     * @return
+     * @return ValueAnimator对象
      */
     private ValueAnimator createTranslateValueAnimator(FixedBlock currEmptyFixedBlock,FixedBlock moveBlock){
         float startAnimValue = 0;
@@ -365,9 +407,163 @@ public class LoadingViewR extends View {
         //设置移动速度
         ValueAnimator valueAnimator = new ValueAnimator().setDuration(mMoveSpeed);
 
+        if (isNextRollLeftOrRight(currEmptyFixedBlock, moveBlock)) {
+
+            // 移动方块向右移动
+            if (isClockWise && currEmptyFixedBlock.index > moveBlock.index
+                    || !isClockWise && currEmptyFixedBlock.index > moveBlock.index) {
+                startAnimValue = moveBlock.rectF.left;
+                endAnimValue = moveBlock.rectF.left + mBlockInterval;
+
+                // 移动方块向左移动
+            } else if (isClockWise && currEmptyFixedBlock.index < moveBlock.index
+                    || !isClockWise && currEmptyFixedBlock.index < moveBlock.index) {
+                startAnimValue = moveBlock.rectF.left;
+                endAnimValue = moveBlock.rectF.left - mBlockInterval;
+            }
+
+            // 设置属性值
+            left = PropertyValuesHolder.ofFloat("left", startAnimValue, endAnimValue);
+            valueAnimator.setValues(left);
+        }else {
+            // 移动方块向上移动
+            if (isClockWise && currEmptyFixedBlock.index < moveBlock.index
+                    || !isClockWise && currEmptyFixedBlock.index < moveBlock.index) {
+
+                startAnimValue = moveBlock.rectF.top;
+                endAnimValue = moveBlock.rectF.top - mBlockInterval;
+
+                // 移动方块向下移动
+            } else if (isClockWise && currEmptyFixedBlock.index > moveBlock.index
+                    || !isClockWise && currEmptyFixedBlock.index > moveBlock.index) {
+                startAnimValue = moveBlock.rectF.top;
+                endAnimValue = moveBlock.rectF.top + mBlockInterval;
+            }
+            // 设置属性值
+            top = PropertyValuesHolder.ofFloat("top", startAnimValue, endAnimValue);
+            valueAnimator.setValues(top);
+        }
+        // 3. 通过监听器更新属性值
+        valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                Object left = animation.getAnimatedValue("left");
+                Object top = animation.getAnimatedValue("top");
+                if (left != null) {
+                    mMoveBlock.rectF.offsetTo((Float) left, mMoveBlock.rectF.top);
+                }
+                if (top != null) {
+                    mMoveBlock.rectF.offsetTo(mMoveBlock.rectF.left, (Float) top);
+                }
+                // 实时更新旋转中心
+                setMoveBlockRotateCenter(mMoveBlock, isClockWise);
+
+                // 更新绘制
+                invalidate();
+            }
+        });
         return valueAnimator;
     }
 
+    /**
+     * 更新移动方块的旋转中心
+     * @param moveBlock 移动方块
+     * @param isClockwise 旋转方向
+     */
+    private void setMoveBlockRotateCenter(MoveBlock moveBlock, boolean isClockwise) {
+        // 以移动方块的左上角为旋转中心
+        if (moveBlock.index == 0) {
+            moveBlock.mX = moveBlock.rectF.right;
+            moveBlock.mY = moveBlock.rectF.bottom;
+
+            // 以移动方块的右下角为旋转中心
+        } else if (moveBlock.index == mLineNumber * mLineNumber - 1) {
+            moveBlock.mX = moveBlock.rectF.left;
+            moveBlock.mY = moveBlock.rectF.top;
+
+            //以移动方块的左下角为旋转中心
+        } else if (moveBlock.index == mLineNumber * (mLineNumber - 1)) {
+            moveBlock.mX = moveBlock.rectF.right;
+            moveBlock.mY = moveBlock.rectF.top;
+
+            // 以移动方块的右上角为旋转中心
+        } else if (moveBlock.index == mLineNumber - 1) {
+            moveBlock.mX = moveBlock.rectF.left;
+            moveBlock.mY = moveBlock.rectF.bottom;
+        }  // 情况1：左边
+        else if (moveBlock.index % mLineNumber == 0) {
+            moveBlock.mX = moveBlock.rectF.right;
+            moveBlock.mY = isClockwise ? moveBlock.rectF.top : moveBlock.rectF.bottom;
+
+            // 情况2：上边
+        } else if (moveBlock.index < mLineNumber) {
+            moveBlock.mX = isClockwise ? moveBlock.rectF.right : moveBlock.rectF.left;
+            moveBlock.mY = moveBlock.rectF.bottom;
+
+            // 情况3：右边
+        } else if ((moveBlock.index + 1) % mLineNumber == 0) {
+            moveBlock.mX = moveBlock.rectF.left;
+            moveBlock.mY = isClockwise ? moveBlock.rectF.bottom : moveBlock.rectF.top;
+
+            // 情况4：下边
+        } else if (moveBlock.index > (mLineNumber - 1) * mLineNumber) {
+            moveBlock.mX = isClockwise ? moveBlock.rectF.left : moveBlock.rectF.right;
+            moveBlock.mY = moveBlock.rectF.top;
+        }
+    }
+
+    /**
+     *  设置旋转动画
+     * @return
+     */
+    private ValueAnimator createMoveValueAnimator() {
+        // 通过属性动画进行设置
+        ValueAnimator moveAnim = ValueAnimator.ofFloat(0, 90).setDuration(mMoveSpeed);
+        moveAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                Object animatedValue = animation.getAnimatedValue();
+
+                // 赋值
+                mRotateDegree = (float) animatedValue;
+
+                // 更新视图
+                invalidate();
+            }
+        });
+        return moveAnim;
+    }
+
+    /**
+     * 判断移动方向
+     * @param currEmptyfixedBlock 空方块
+     * @param rollSquare 滚动的方块
+     * @return 返回false表示向左移动，返回true表示向右移动
+     */
+    private boolean isNextRollLeftOrRight(FixedBlock currEmptyfixedBlock, FixedBlock rollSquare) {
+        if (currEmptyfixedBlock.rectF.left - rollSquare.rectF.left == 0) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+    /**
+     * 更新移动方块的位置
+     */
+    private void updateMoveBlock() {
+
+        mMoveBlock.rectF.set(mFixedBlock[mCurrEmptyPosition].next.rectF);
+        mMoveBlock.index = mFixedBlock[mCurrEmptyPosition].next.index;
+        setMoveBlockRotateCenter(mMoveBlock, isClockWise);
+    }
+    /**
+     * 停止动画
+     */
+    public void stopMoving() {
+
+        // 通过标记位来设置
+        mAllowRoll = false;
+    }
 
 
 }
