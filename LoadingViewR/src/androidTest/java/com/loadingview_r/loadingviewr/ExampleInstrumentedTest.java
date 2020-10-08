@@ -1,4 +1,4 @@
-package com.loadingview_r.library;
+package com.loadingview_r.loadingviewr;
 
 import android.content.Context;
 
@@ -21,6 +21,6 @@ public class ExampleInstrumentedTest {
     public void useAppContext() {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        assertEquals("com.loadingview_r.library.test", appContext.getPackageName());
+        assertEquals("com.loadingview_r.loadingviewr.test", appContext.getPackageName());
     }
 }

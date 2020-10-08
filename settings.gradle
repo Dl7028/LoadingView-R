@@ -1,3 +1,4 @@
+include ':LoadingViewR'
 include ':library'
 include ':app'
 rootProject.name = "LoadingView-R"

@@ -1,4 +1,4 @@
-package com.loadingview_r.library;
+package com.loadingview_r.loadingviewr;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
