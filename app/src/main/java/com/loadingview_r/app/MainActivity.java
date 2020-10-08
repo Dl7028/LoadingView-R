@@ -10,7 +10,7 @@ import com.loadingview_r.app.view.LoadingViewR;
 
 public class MainActivity extends AppCompatActivity {
     LoadingViewR loadingViewR;
-    Button startButton;
+    Button startButton,stopButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -18,12 +18,19 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         loadingViewR = findViewById(R.id.LoadingView_r);
         startButton = findViewById(R.id.start);
+        stopButton = findViewById(R.id.finish);
         startButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 loadingViewR.startMoving();
             }
         });
+        stopButton.setOnClickListener(new View.OnClickListener(){
 
+            @Override
+            public void onClick(View v) {
+                loadingViewR.stopMoving();
+            }
+        });
     }
 }

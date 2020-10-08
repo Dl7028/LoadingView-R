@@ -32,7 +32,7 @@ public class LoadingViewR extends View {
     private float mHalfBlockWidth;  //半个方块的宽度
     private float mBlockInterval; //方块间隔
     private Paint mPaint; //
-    private boolean isClockWise; //动画是否是逆时针旋转
+    private boolean isClockWise; //动画是否是顺时针旋转
     private int mInitPosition; //移动方块的初始位置（空白位置）
     private int mCurrEmptyPosition; //当前空白方块位置
     private int mLineNumber; //方块行数量，最少3行
@@ -102,7 +102,7 @@ public class LoadingViewR extends View {
         mHalfBlockWidth = typedArray.getDimension(R.styleable.LoadingViewR_half_BlockWidth,30);
         mBlockInterval = typedArray.getDimension(R.styleable.LoadingViewR_blockInterval,10);
         mMoveBlockAngle = typedArray.getFloat(R.styleable.LoadingViewR_move_blockAngle,10);
-        mFixBlockAngle = typedArray.getFloat(R.styleable.LoadingViewR_fix_blockAngle,30);
+        mFixBlockAngle = typedArray.getFloat(R.styleable.LoadingViewR_fix_blockAngle,10);
 
         int defaultColor = context.getResources().getColor(R.color.colorAccent); //默认颜色
         mBlockColor = typedArray.getColor(R.styleable.LoadingViewR_blockColor,defaultColor);
@@ -112,8 +112,8 @@ public class LoadingViewR extends View {
             mInitPosition = 0 ;
         }
 
-        isClockWise = typedArray.getBoolean(R.styleable.LoadingViewR_isClock_Wise,true);
-        mMoveSpeed = typedArray.getInteger(R.styleable.LoadingViewR_moveSpeed,250);
+        isClockWise = typedArray.getBoolean(R.styleable.LoadingViewR_isClock_Wise,false);
+        mMoveSpeed = typedArray.getInteger(R.styleable.LoadingViewR_moveSpeed,300);
 
         int mMoveInterpolatorResId = typedArray.getResourceId(R.styleable.LoadingViewR_move_Interpolator,android.R.anim.linear_interpolator); //线性插值器
         mMoveInterpolator = AnimationUtils.loadInterpolator(context,mMoveInterpolatorResId);
@@ -141,7 +141,7 @@ public class LoadingViewR extends View {
     }
 
     /**
-     * 初始化方块对象之间的关系
+     * 初始化
      */
     private void init(){
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -155,13 +155,12 @@ public class LoadingViewR extends View {
      */
     private void initBlocks(int initPosition){
         mFixedBlock = new FixedBlock[mLineNumber*mLineNumber]; //方块总数量
-        Log.d("initBlocks","new对象");
         //创建固定方块并保存到数组
         for(int i =0;i<mFixedBlock.length;i++){
             mFixedBlock[i] = new FixedBlock();
             mFixedBlock[i].index = i; //赋值下标
             mFixedBlock[i].isShow = initPosition != i; //如果是移动方块则不显示
-            mFixedBlock[i].rectF = new RectF(); //位置参数
+            mFixedBlock[i].rectF = new RectF(); //方块位置参数
         }
 
         //创建移动方块
@@ -176,7 +175,7 @@ public class LoadingViewR extends View {
     /**
      * 关联外部方块
      * @param fixedBlocks 方块数组
-     * @param isClockWise 是否逆时针旋转
+     * @param isClockWise 是否顺时针旋转
      */
     private void relateOuterBlock(FixedBlock[] fixedBlocks,boolean isClockWise){
         int lineCount = (int) Math.sqrt(fixedBlocks.length);
@@ -202,7 +201,7 @@ public class LoadingViewR extends View {
             }
         }
         //关联第一列
-        for (int i = lineCount; i<=lineCount*lineCount-1; i=lineCount+1){
+        for (int i = lineCount; i<=lineCount*lineCount-1; i+=lineCount){
             if(i == (lineCount-1)*lineCount){ //第一列最后一个
                 fixedBlocks[i].next = isClockWise ? fixedBlocks[i+1] : fixedBlocks[i-lineCount];
                 continue;
@@ -210,7 +209,7 @@ public class LoadingViewR extends View {
             fixedBlocks[i].next = isClockWise ? fixedBlocks[i+lineCount] : fixedBlocks[i-lineCount];
         }
         //关联最后一列
-        for (int i = 2 *lineCount - 1;i <= lineCount*lineCount-1;i = lineCount+1){
+        for (int i = 2 *lineCount - 1;i <= lineCount*lineCount-1;i += lineCount){
             if(i == lineCount*lineCount-1){ //最后一列的最后一个
                 fixedBlocks[i].next = isClockWise ? fixedBlocks[i - lineCount] : fixedBlocks[i - 1];
                 continue;
@@ -564,6 +563,4 @@ public class LoadingViewR extends View {
         // 通过标记位来设置
         mAllowRoll = false;
     }
-
-
 }
